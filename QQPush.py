@@ -12,8 +12,10 @@ from Log import add_log
 class QQPush:
 
     def __init__(self):
-        self.qq_user = config.push.users
-        self.qq_group = config.push.groups
+        #self.qq_user = config.push.users
+        #self.qq_group = config.push.groups
+        #self.qq_guild = config.push.guilds
+        self.push_config = config.push_config.pc
         self.coolq_url = config.cqhttp_url
         self.coolq_token = config.cqhttp_token
         self.session = aiohttp.ClientSession()
@@ -28,7 +30,7 @@ class QQPush:
         self.is_closed = True
         await self.session.close()
 
-    async def push_message(self, message, permission):
+    async def push_message(self, message, ch_id, type):
         """
         将消息按配置文件推送至QQ私聊或群聊
 
@@ -36,14 +38,24 @@ class QQPush:
         :param permission: 1表示消息动态，2表示用户动态
         :return:
         """
+        for p_config in self.push_config:
+            if p_config['channel'] == ch_id:
+                if p_config[type]:
+                    await self._push(message, p_config['qq_id'], p_config['ch_id'], p_config['type'])
+
+        """
         for group in self.qq_group:
             if group[permission]:
-                await self._push(message, group[0], 'group')
+                await self._push(message, group[0], '', 'group')
+        for guild in self.qq_guild:
+            if guild[permission]:
+                await self._push(message, guild[0], guild[1], 'guild')
         for user in self.qq_user:
             if user[permission]:
-                await self._push(message, user[0], 'user')
+                await self._push(message, user[0], '', 'user')
+        """
 
-    async def _push(self, message, qq_id, id_type):
+    async def _push(self, message, qq_id, ch_id, id_type):
         """
         将消息推送至cqhttp
         :param message: message text
@@ -62,6 +74,10 @@ class QQPush:
         elif id_type == 'user':
             data['message_type'] = 'private'
             data['user_id'] = qq_id
+        elif id_type == 'guild':
+            data['guild_id'] = qq_id
+            data['channel_id'] = ch_id
+            url = '%s/send_guild_channel_msg' % self.coolq_url
 
         # 判断是否设置cqhttp access token
         if self.coolq_token != "":
@@ -74,39 +90,39 @@ class QQPush:
                     if response is not None:
                         if response.status == 200:
                             # cqhttp接受消息，但不知操作实际成功与否
-                            log = 'Message to %s %d is sent. Response:%d. Retries:%d. Message: %s' % \
-                                  (id_type, qq_id, response.status, i, data)
+                            log = 'Message to %s %d %d is sent. Response:%d. Retries:%d. Message: %s' % \
+                                  (id_type, qq_id, ch_id, response.status, i, data)
                             add_log(0, 'PUSH', log)
                             break
                         if response.status == 401:
                             # token needed
-                            log = 'Failed to send message to %s %d. Reason: Access token is not provided. ' \
-                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, response.status, i, data)
+                            log = 'Failed to send message to %s %d %d. Reason: Access token is not provided. ' \
+                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, ch_id, response.status, i, data)
                             add_log(0, 'PUSH', log)
                             break
                         if response.status == 403:
                             # token is wrong
-                            log = 'Failed to send message to %s %d. Reason: Access token is wrong. ' \
-                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, response.status, i, data)
+                            log = 'Failed to send message to %s %d %d. Reason: Access token is wrong. ' \
+                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, ch_id, response.status, i, data)
                             add_log(0, 'PUSH', log)
                             break
                         if response.status == 404:
                             # url is wrong
-                            log = 'Failed to send message to %s %d. Reason: Coolq URL is wrong. ' \
-                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, response.status, i, data)
+                            log = 'Failed to send message to %s %d %d. Reason: Coolq URL is wrong. ' \
+                                  'Response:%d. Retries:%d. Message: %s' % (id_type, qq_id, ch_id, response.status, i, data)
                             add_log(0, 'PUSH', log)
                             break
                     if i == 4:
                         # 未超时但失败，还没出过这问题
-                        log = 'Failed to send message to %s %d. Response:%d. Message: %s' % \
-                              (id_type, qq_id, response.status, data)
+                        log = 'Failed to send message to %s %d %d. Response:%d. Message: %s' % \
+                              (id_type, qq_id, ch_id, response.status, data)
                         add_log(0, 'PUSH', log)
             except:
                 traceback.print_exc()
                 if i == 4:
                     # 哦 5次全超时
-                    log = 'Timeout! Failed to send message to %s %d. Message: %s' % \
-                          (id_type, qq_id, data)
+                    log = 'Timeout! Failed to send message to %s %d %d. Message: %s' % \
+                          (id_type, qq_id, ch_id, data)
                     add_log(0, 'PUSH', log)
                     break
                 await asyncio.sleep(5)

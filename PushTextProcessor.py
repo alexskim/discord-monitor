@@ -125,7 +125,7 @@ class PushTextProcessor:
                 keyword = self.num2keyword[block]
                 v = keywords[keyword]
                 if not v:
-                    v = "None"
+                    v = ""
                 blocks[i] = v
         return "".join(blocks)
 

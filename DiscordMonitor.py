@@ -5,6 +5,8 @@ import datetime
 import os
 import platform
 import traceback
+import base64
+from pygtrans import Translate
 
 import discord
 from aiohttp import ClientConnectorError, ClientProxyConnectionError, InvalidURL
@@ -31,11 +33,14 @@ class DiscordMonitor(discord.Client):
             discord.Client.__init__(self, proxy=config.proxy, **kwargs)
         else:
             discord.Client.__init__(self, **kwargs)
+        self.hide_user = config.push_config.hide_user
+        self.block_user = config.push_config.block_user
         self.message_user = config.message_monitor.users
         self.message_channel = config.message_monitor.channel_ids
         self.message_channel_name = config.message_monitor.channel_names
         self.user_dynamic_user = config.user_dynamic_monitor.users
         self.user_dynamic_server = config.user_dynamic_monitor.servers
+        self.client = Translate()
         self.qq_push = QQPush()
         self.push_text_processor = PushTextProcessor()
         self.event_set = set()
@@ -135,6 +140,13 @@ class DiscordMonitor(discord.Client):
                     message.author.name + '#' + message.author.discriminator,
                     message.guild.name, message.channel.name, message.content, attachment_log)
         add_log(0, 'Discord', log_text)
+
+        trans_text = self.client.translate(self.push_text_processor.escape_cqcode(content))
+        try:
+            trans_message = self.push_text_processor.escape_cqcode(content) + "\n" + trans_text.translatedText
+        except AttributeError as e:
+            trans_message = self.push_text_processor.escape_cqcode(content)
+
         keywords = {"type": status,
                     "user_id": str(message.author.id),
                     "user_name": message.author.name,
@@ -143,7 +155,7 @@ class DiscordMonitor(discord.Client):
                     "channel_name": message.channel.name,
                     "server_id": str(message.guild.id),
                     "server_name": message.guild.name,
-                    "content": self.push_text_processor.escape_cqcode(content),
+                    "content": trans_message,
                     "content_cat": content_cat,
                     "attachment": attachment_str,
                     "image": image_str,
@@ -152,9 +164,17 @@ class DiscordMonitor(discord.Client):
         if len(self.message_user) != 0:
             keywords["user_display_name"] = self.message_user[str(message.author.id)]
         else:
-            keywords["user_display_name"] = message.author.name + '#' + message.author.discriminator
+            if message.author.discriminator == "0":
+                keywords["user_display_name"] = message.author.name
+            else:
+                keywords["user_display_name"] = message.author.name + '#' + message.author.discriminator
+        if message.author.id in self.hide_user:
+            keywords["user_display_name"] = "神秘用户"
+        if message.author.id in self.block_user:
+            keywords["user_display_name"] = keywords["user_display_name"] + "(被屏蔽)"
+            keywords["content"] = "Base64:" + str(base64.b64encode(keywords["content"].encode('utf-8')),'utf-8')
         push_text = self.push_text_processor.push_text_process(keywords, is_user_dynamic=False)
-        asyncio.create_task(self.qq_push.push_message(push_text, 1))
+        asyncio.create_task(self.qq_push.push_message(push_text, message.channel.id, 'message'))
 
     async def process_user_update(self, before, after, user: discord.Member, status):
         """
@@ -190,7 +210,7 @@ class DiscordMonitor(discord.Client):
                     "time": t,
                     "timezone": timezone.zone}
         push_text = self.push_text_processor.push_text_process(keywords, is_user_dynamic=True)
-        asyncio.create_task(self.qq_push.push_message(push_text, 2))
+        asyncio.create_task(self.qq_push.push_message(push_text, 0, 'dynamic'))
 
     async def on_ready(self, *args, **kwargs):
         """

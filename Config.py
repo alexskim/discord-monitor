@@ -15,6 +15,7 @@ class Config:
         self.message_monitor = Config.MessageMonitor(data['message_monitor'])
         self.user_dynamic_monitor = Config.UserDynamicMonitor(data['user_dynamic_monitor'])
         self.push = Config.Push(data['push'])
+        self.push_config = Config.PushConfig(data['push_config'])
         self.push_content = Config.PushContent(data['push_text'])
 
     class MessageMonitor:
@@ -39,6 +40,13 @@ class Config:
         def __init__(self, data: dict):
             self.groups = data['QQ_group']
             self.users = data['QQ_user']
+            self.guilds = data['QQ_guild']
+
+    class PushConfig:
+        def __init__(self, data: dict):
+            self.hide_user = data["hide_user"]
+            self.block_user = data["block_user"]
+            self.pc = data['sub']
 
     class PushContent:
         def __init__(self, data: dict):
@@ -52,9 +60,9 @@ def read_config() -> Config:
     while True:
         config_path = 'config.json'
         try:
-            config_path_temp = input('请输入配置文件路径，空输入则为默认(默认为config.json):\n')
-            if config_path_temp != '':
-                config_path = config_path_temp
+            #config_path_temp = input('请输入配置文件路径，空输入则为默认(默认为config.json):\n')
+            #if config_path_temp != '':
+            #    config_path = config_path_temp
             with open(config_path, 'r', encoding='utf8') as f:
                 return Config(json.load(f))
         except FileNotFoundError:
@@ -73,3 +81,4 @@ message_monitor = config.message_monitor
 user_dynamic_monitor = config.user_dynamic_monitor
 push = config.push
 push_content = config.push_content
+push_config = config.push_config
